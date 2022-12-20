@@ -1,0 +1,12 @@
+{
+  "name": "flstdistributor",
+  "version-string": "1.0.0",
+  "homepage": "https://github.com/WirelessLan/FLSTDistributor",
+  "license": "MIT",
+  "dependencies": [
+    "boost-stl-interfaces",
+    "fmt",
+    "mmio",
+    "spdlog"
+  ]
+}
