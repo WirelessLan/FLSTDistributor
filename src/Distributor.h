@@ -2,10 +2,24 @@
 
 #include <regex>
 #include <fstream>
+#include <set>
 
 #include "Utils.h"
 
 namespace Distributor {
+	struct FormData {
+		std::string pluginName;
+		uint32_t formId;
+
+		bool operator<(const FormData& o)  const {
+			if (pluginName == o.pluginName)
+				return formId < o.formId;
+			return pluginName.compare(o.pluginName);
+		}
+	};
+
+	std::map<FormData, std::set<FormData>> g_distMap;
+
 	uint8_t GetNextChar(const std::string& line, uint32_t& index) {
 		if (index < line.length())
 			return line[index++];
@@ -33,10 +47,10 @@ namespace Distributor {
 		return retVal;
 	}
 
-	void LoadConfig(std::unordered_map<RE::BGSListForm*, std::vector<RE::TESForm*>>& map, const std::string& configPath) {
+	void LoadConfig(const std::string& configPath) {
 		std::ifstream configFile(configPath);
 
-		logger::info(FMT_STRING("Read the config file: {}"), configPath);
+		logger::info(FMT_STRING("Reading the config file: {}"), configPath);
 		if (!configFile.is_open()) {
 			logger::info(FMT_STRING("Cannot open the config file: {}"), configPath);
 			return;
@@ -75,37 +89,24 @@ namespace Distributor {
 				continue;
 			}
 
-			RE::TESForm* form = Utils::GetFormFromIdentifier(listFormPlugin, listFormId);
-			if (!form) {
-				logger::info(FMT_STRING("Cannot find the FormList: {} | {}"), listFormPlugin, listFormId);
-				continue;
+			FormData listForm = { listFormPlugin,  Utils::ToFormId(listFormId) };
+			FormData targetForm = { targetPlugin, Utils::ToFormId(targetFormId) };
+			auto it = g_distMap.find(listForm);
+			if (it == g_distMap.end()) {
+				auto result = g_distMap.insert(std::make_pair(listForm, std::set<FormData>()));
+				if (!result.second) {
+					logger::info(FMT_STRING("Failed to insert the form: {}"), line);
+					continue;
+				}
+
+				it = result.first;
 			}
 
-			RE::BGSListForm* listForm = RE::fallout_cast<RE::BGSListForm*, RE::TESForm>(form);
-			if (!listForm) {
-				logger::info(FMT_STRING("Invalid FormList: {} | {}"), listFormPlugin, listFormId);
-				continue;
-			}
-
-			form = Utils::GetFormFromIdentifier(targetPlugin, targetFormId);
-			if (!form) {
-				logger::info(FMT_STRING("Cannot find the Form: {} | {}"), targetPlugin, targetFormId);
-				continue;
-			}
-
-			auto it = map.find(listForm);
-			if (it == map.end()) {
-				std::vector<RE::TESForm*> nVec{ form };
-				map.insert(std::make_pair(listForm, nVec));
-			}
-			else {
-				it->second.push_back(form);
-			}
+			it->second.insert(targetForm);
 		}
 	}
 
-	std::unordered_map<RE::BGSListForm*, std::vector<RE::TESForm*>> LoadConfigs() {
-		std::unordered_map<RE::BGSListForm*, std::vector<RE::TESForm*>> retMap;
+	void LoadConfigs() {
 		const std::filesystem::path configDir{ "Data\\F4SE\\Plugins\\" + std::string(Version::PROJECT) };
 
 		const std::regex filter(".*.txt");
@@ -117,24 +118,40 @@ namespace Distributor {
 			if (!std::regex_match(iter.path().filename().string(), filter))
 				continue;
 
-			LoadConfig(retMap, iter.path().string());
+			LoadConfig(iter.path().string());
 		}
-
-		return retMap;
 	}
 
 	void Distribute() {
-		std::unordered_map<RE::BGSListForm*, std::vector<RE::TESForm*>> configs = LoadConfigs();
+		logger::info("Start Distribution"sv);
+		for (std::pair<FormData, std::set<FormData>> e : g_distMap) {
+			RE::TESForm* form = Utils::GetFormFromIdentifier(e.first.pluginName, e.first.formId);
+			if (!form) {
+				logger::info(FMT_STRING("Cannot find the FormList: {} | 0x{:08X}"), e.first.pluginName, e.first.formId);
+				continue;
+			}
 
-		for (std::pair<RE::BGSListForm*, std::vector<RE::TESForm*>> e : configs) {
-			logger::info(FMT_STRING("Distribute to FormList {:08X}..."), e.first->formID);
-			for (RE::TESForm* form : e.second) {
-				auto it = std::find(e.first->arrayOfForms.begin(), e.first->arrayOfForms.end(), form);
-				if (it == e.first->arrayOfForms.end()) {
-					e.first->arrayOfForms.push_back(form);
-					logger::info(FMT_STRING("Form Added : {:08X}"), form->formID);
+			RE::BGSListForm* listForm =	form->As<RE::BGSListForm>();
+			if (!listForm) {
+				logger::info(FMT_STRING("Invalid FormList: {} | 0x{:08X}"), e.first.pluginName, e.first.formId);
+				continue;
+			}
+
+			logger::info(FMT_STRING("Distribute to FormList 0x{:08X}..."), listForm->formID);
+			for (FormData formData : e.second) {
+				form = Utils::GetFormFromIdentifier(formData.pluginName, formData.formId);
+				if (!form) {
+					logger::info(FMT_STRING("Cannot find the Form: {} | 0x{:08X}"), formData.pluginName, formData.formId);
+					continue;
+				}
+
+				auto it = std::find(listForm->arrayOfForms.begin(), listForm->arrayOfForms.end(), form);
+				if (it == listForm->arrayOfForms.end()) {
+					listForm->arrayOfForms.push_back(form);
+					logger::info(FMT_STRING("Form Added : 0x{:08X}"), form->formID);
 				}
 			}
 		}
+		logger::info("Distribution End"sv);
 	}
 }

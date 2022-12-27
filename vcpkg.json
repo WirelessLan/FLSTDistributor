@@ -1,6 +1,6 @@
 {
   "name": "flstdistributor",
-  "version-string": "1.0.0",
+  "version-string": "1.0.1",
   "homepage": "https://github.com/WirelessLan/FLSTDistributor",
   "license": "MIT",
   "dependencies": [

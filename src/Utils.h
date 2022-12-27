@@ -34,6 +34,10 @@ namespace Utils {
 		return !IsLight(mod) ? mod->compileIndex : (0xFE000 | mod->smallFileCompileIndex);
 	}
 
+	uint32_t ToFormId(const std::string& formIdStr) {
+		return std::stoul(formIdStr, nullptr, 16) & 0xFFFFFF;
+	}
+
 	RE::TESForm* GetFormFromIdentifier(const std::string& pluginName, const uint32_t formId) {
 		RE::TESDataHandler* g_dataHandler = RE::TESDataHandler::GetSingleton();
 		if (!g_dataHandler)
@@ -54,7 +58,7 @@ namespace Utils {
 	}
 
 	RE::TESForm* GetFormFromIdentifier(const std::string& pluginName, const std::string& formIdStr) {
-		uint32_t formID = std::stoul(formIdStr, nullptr, 16) & 0xFFFFFF;
+		uint32_t formID = ToFormId(formIdStr);
 		return GetFormFromIdentifier(pluginName, formID);
 	}
 }
